@@ -1,3 +1,4 @@
+// Modified by Victor (2026): follows the removal of the verify:skills guard. See NOTICE.
 // Regression tests for `verify-format-coverage`'s sibling-guard vouch (Copilot,
 // #1962). The three root guards form a cycle so that dropping any one from
 // `validate` is caught by another — but the vouch branch itself had no test, so
@@ -75,11 +76,7 @@ function runWithScripts(scripts) {
   }
 }
 
-const ALL_SIBLINGS = [
-  "verify:typecheck-coverage",
-  "verify:dep-lockstep",
-  "verify:skills",
-];
+const ALL_SIBLINGS = ["verify:typecheck-coverage", "verify:dep-lockstep"];
 
 for (const dropped of ALL_SIBLINGS) {
   test(`vouch: fails when \`${dropped}\` is dropped from validate`, () => {
@@ -93,16 +90,16 @@ for (const dropped of ALL_SIBLINGS) {
 
 test("vouch: a mention is not an invocation", () => {
   // `rootReachesScript` used to match any `npm run …` substring, so a `validate`
-  // reading `echo npm run verify:skills` satisfied the vouch while the guard
-  // never executed — the cycle protecting nothing (Copilot).
+  // reading `echo npm run verify:dep-lockstep` satisfied the vouch while the
+  // guard never executed — the cycle protecting nothing (Copilot).
   const scripts = scriptsRunning(ALL_SIBLINGS);
   scripts.validate = scripts.validate.replace(
-    "npm run verify:skills",
-    "echo npm run verify:skills",
+    "npm run verify:dep-lockstep",
+    "echo npm run verify:dep-lockstep",
   );
   const { status, out } = runWithScripts(scripts);
   assert.equal(status, 1, out);
-  assert.match(out, /no longer runs `verify:skills`/);
+  assert.match(out, /no longer runs `verify:dep-lockstep`/);
 });
 
 test("vouch: passes when every sibling is still wired", () => {

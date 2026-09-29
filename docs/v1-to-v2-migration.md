@@ -384,4 +384,4 @@ Notes:
 
 - [MCP server configuration](./mcp-server-configuration.md) — the full `--catalog` / `--config` / ad-hoc model.
 - [CLI README](../clients/cli/README.md) · [TUI README](../clients/tui/README.md) · [web README](../clients/web/README.md)
-- [Reviewing an MCP App](./mcp-app-review.md) — the CLI-first App review recipe.
+- [Reviewing an MCP App](https://github.com/modelcontextprotocol/inspector/blob/v2/main/docs/mcp-app-review.md) — the CLI-first App review recipe.

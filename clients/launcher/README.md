@@ -15,7 +15,7 @@ All configuration parsing, config-file loading, and server setup are handled by 
 ## Web server-list flags (`--web`)
 
 `mcp-inspector --web` chooses which server list the UI shows and whether it is
-editable (see [specification/v2_catalog_launch_config.md](../../specification/v2_catalog_launch_config.md)):
+editable (see [specification/v2_catalog_launch_config.md](https://github.com/modelcontextprotocol/inspector/blob/v2/main/specification/v2_catalog_launch_config.md)):
 
 | Invocation                                                                                                 | Server list                                                                                                     | Editable in UI? |
 | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | --------------- |
@@ -128,8 +128,8 @@ and the root `local:validate` — the first stage of `npm run local:gate` — ru
 
 ## Publishing
 
-The launcher provides the `mcp-inspector` bin for the single `@modelcontextprotocol/inspector` tarball. Packaging is a whole-repo concern — how the one-package/single-version tarball is assembled, the `"files"` allowlist invariants (no source maps, why `clients/web/build` needs `.npmignore`, why `clients/web/static` must ship at that exact path), and the `npm run pack:verify` publish smoke — is documented in [Publishing](../../docs/publishing.md).
+The launcher provides the `mcp-inspector` bin for the single `@modelcontextprotocol/inspector` tarball. Packaging is a whole-repo concern — how the one-package/single-version tarball is assembled, the `"files"` allowlist invariants (no source maps, why `clients/web/build` needs `.npmignore`, why `clients/web/static` must ship at that exact path), and the `npm run pack:verify` publish smoke — is documented in [Publishing](https://github.com/modelcontextprotocol/inspector/blob/v2/main/docs/publishing.md).
 
 ## Architecture
 
-For how the launcher fits with the shared config processor and app runners, see the [Launcher and config consolidation](../../docs/launcher-config-consolidation-plan.md) document in the repo root `docs/` folder.
+For how the launcher fits with the shared config processor and app runners, see the [Launcher and config consolidation](https://github.com/modelcontextprotocol/inspector/blob/v2/main/docs/launcher-config-consolidation-plan.md) document in the repo root `docs/` folder.

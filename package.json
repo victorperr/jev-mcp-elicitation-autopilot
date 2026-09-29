@@ -1,21 +1,16 @@
 {
-  "name": "@modelcontextprotocol/inspector",
+  "name": "mcp-inspector-jev-elicitation",
   "version": "2.8.0",
-  "description": "The Model Context Protocol Inspector",
+  "description": "Fork of the MCP Inspector that answers MCP elicitation forms unattended with TypeSafe Jev, so human-in-the-loop MCP tools can be tested in CI.",
   "keywords": [
     "MCP",
-    "inspector"
+    "inspector",
+    "elicitation",
+    "jev",
+    "testing"
   ],
-  "homepage": "https://github.com/modelcontextprotocol/inspector#readme",
-  "bugs": {
-    "url": "https://github.com/modelcontextprotocol/inspector/issues"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/modelcontextprotocol/inspector.git"
-  },
   "license": "SEE LICENSE IN LICENSE",
-  "author": "The MCP Maintainers and Community",
+  "author": "Victor (Jev elicitation autopilot); original MCP Inspector by The MCP Maintainers and Community",
   "type": "module",
   "bin": {
     "mcp-inspector": "./clients/launcher/build/index.js"
@@ -39,17 +34,15 @@
     "build:web": "cd clients/web && npm run build",
     "build:launcher": "cd clients/launcher && npm run build",
     "local:gate": "node scripts/gate-lease.mjs npm run local:gate:stages",
-    "local:gate:stages": "npm run local:validate && npm run verify:skills:cli && npm run coverage && npm run verify:build-gate && npm run verify:bundle-externals && npm run smoke && npm run smoke:web:firefox && npm run local:storybook",
+    "local:gate:stages": "npm run local:validate && npm run coverage && npm run verify:build-gate && npm run verify:bundle-externals && npm run smoke && npm run smoke:web:firefox && npm run local:storybook",
     "local:validate": "npm run validate:guards && npm run validate:core && cd clients/web && npm run check && cd ../cli && npm run check && cd ../tui && npm run check && cd ../launcher && npm run check",
     "local:storybook": "cd clients/web && npx playwright install chromium && npm run test:storybook",
     "verify:build-gate": "node scripts/verify-build-gate.mjs",
     "verify:bundle-externals": "node scripts/verify-bundle-externals.mjs",
     "verify:typecheck-coverage": "node scripts/verify-typecheck-coverage.mjs",
-    "verify:skills": "node scripts/verify-skills.mjs",
-    "verify:skills:cli": "node scripts/verify-skills-cli.mjs",
     "test:scripts": "node --test \"scripts/**/*.test.mjs\"",
     "validate": "npm run validate:guards && npm run validate:core && npm run validate:web && npm run validate:cli && npm run validate:tui && npm run validate:launcher",
-    "validate:guards": "npm run verify:format-coverage && npm run verify:skills && npm run verify:typecheck-coverage && npm run verify:dep-lockstep && npm run verify:test-timeouts && npm run test:scripts",
+    "validate:guards": "npm run verify:format-coverage && npm run verify:typecheck-coverage && npm run verify:dep-lockstep && npm run verify:test-timeouts && npm run test:scripts",
     "verify:format-coverage": "node scripts/verify-format-coverage.mjs",
     "verify:dep-lockstep": "node scripts/verify-dep-lockstep.mjs",
     "verify:test-timeouts": "node scripts/verify-test-timeouts.mjs",
@@ -87,8 +80,7 @@
     "smoke:launcher": "node scripts/smoke-launcher.mjs",
     "pack:verify": "node scripts/install-smoke-browser.mjs chromium && node scripts/pack-and-verify.mjs",
     "prepack": "npm run build",
-    "postinstall": "node scripts/install-clients.mjs",
-    "skills:eval": "node scripts/skill-eval.mjs"
+    "postinstall": "node scripts/install-clients.mjs"
   },
   "dependencies": {
     "@hono/node-server": "^2.0.12",

@@ -1,11 +1,12 @@
+# Modified by Victor (2026) for this fork. See NOTICE.
 .idea
 .vscode
 .DS_Store
-# Claude Code's local state (worktrees, settings.local.json, …) stays out of the
-# repo — but `.claude/skills/` is committed on purpose: the skills ARE the
-# repo's procedures, and every contributor gets them with the checkout.
-.claude/*
-!.claude/skills/
+# Claude Code's local state stays out of the repo.
+.claude/
+# Third-party article (Langfuse, © its authors) kept locally as reference
+# material for the Jev integration — not ours to redistribute.
+docs/jev_for_evals.md
 node_modules
 dist
 clients/web/dist

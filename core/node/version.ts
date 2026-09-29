@@ -1,6 +1,8 @@
 /**
  * Single source of truth for the Inspector's version, read from the **root**
- * `package.json` of the published `@modelcontextprotocol/inspector` package.
+ * `package.json` of this fork (upstream: `@modelcontextprotocol/inspector`).
+ *
+ * Modified by Victor: the root package was renamed for the fork.
  *
  * The Inspector ships as one package with one version number; the per-client
  * `package.json`s deliberately carry no `version` field, so every Node client
@@ -17,7 +19,7 @@ import { dirname, join, parse } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /** The published root package's name — how we recognize the root manifest. */
-export const ROOT_PACKAGE_NAME = "@modelcontextprotocol/inspector";
+export const ROOT_PACKAGE_NAME = "mcp-inspector-jev-elicitation";
 
 interface RootManifest {
   name?: string;

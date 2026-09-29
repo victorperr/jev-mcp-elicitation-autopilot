@@ -1,0 +1,57 @@
+Elicitation Autopilot for MCP servers
+A fork of the MCP Inspector (https://github.com/modelcontextprotocol/inspector)
+
+Upstream work
+-------------
+MCP Inspector
+Copyright (c) 2024-2025 Model Context Protocol a Series of LF Projects, LLC,
+and its contributors. Licensed as described in LICENSE (Apache-2.0; MIT for
+contributions not yet relicensed; CC-BY-4.0 for documentation).
+
+This fork is based on MCP Inspector v2.8.0. It is not affiliated with or
+endorsed by the Model Context Protocol project. "Model Context Protocol" and
+"MCP Inspector" are used only to describe the origin of this work.
+
+Modifications
+-------------
+Copyright (c) 2026 Victor. Modifications are licensed under Apache-2.0.
+
+Added (new files):
+  clients/cli/src/elicit/jev-types.ts
+  clients/cli/src/elicit/jev-elicitation.ts
+  clients/cli/src/elicit/jev-client.ts
+  clients/cli/src/elicit/elicitation-autopilot.ts
+  clients/cli/__tests__/jev-elicitation.test.ts
+  clients/cli/__tests__/jev-client.test.ts
+  clients/cli/__tests__/elicitation-autopilot.test.ts
+  clients/cli/__tests__/elicit-cli.test.ts
+  NOTICE
+  docs/images/shared-code-architecture.png (moved from specification/diagrams/)
+
+Changed (each file carries a "Modified by Victor" notice, except
+where noted):
+  clients/cli/src/cli.ts            --elicit* flags; form elicitation advertised
+                                    only with --elicit; autopilot wiring
+  clients/cli/src/error-handler.ts  exit codes 9 and 10
+  clients/cli/README.md             "Unattended elicitation" section, exit codes
+  core/node/version.ts              root package name for the fork
+  clients/web/src/test/integration/node/version.test.ts
+                                    follows the renamed root package
+  scripts/verify-format-coverage.mjs and its .main.test.mjs
+                                    no longer vouch for the removed skills guard
+  .github/workflows/main.yml        publish jobs and skills step removed
+  package.json, package-lock.json   renamed; skills scripts removed (no notice:
+                                    JSON cannot carry comments)
+  .gitignore                        ignores local Claude state and a
+                                    third-party reference article
+  README.md                         rewritten for the fork
+  docs/*.md, clients/*/README.md    links to removed files now point upstream
+
+Removed (maintainer / organization-specific material; available upstream):
+  AGENTS.md, CLAUDE.md, CONTRIBUTING.md, SECURITY.md, CODE_OF_CONDUCT.md,
+  .mcp.json, .claude/skills/, specification/, .github/ISSUE_TEMPLATE/,
+  .github/pull_request_template.md, the dependabot-alerts, dependency-refresh
+  and sdk-watch workflows and their scripts, the skills verification and
+  evaluation scripts, and the internal docs publishing.md, skill-authoring.md,
+  mcp-app-review.md, launcher-config-consolidation-plan.md and
+  inspector-roadmap-2026-h2.md.

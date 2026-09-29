@@ -1,3 +1,4 @@
+// Modified by Victor (2026): added the --elicit* flags and the elicitation autopilot wiring. See NOTICE.
 import { Command } from "commander";
 type McpResponse = Record<string, unknown>;
 import { awaitableLog } from "./utils/awaitable-log.js";
@@ -90,6 +91,13 @@ import {
 import { type LoggingLevel } from "@modelcontextprotocol/client";
 import { LoggingLevelSchema } from "@modelcontextprotocol/core";
 import { readInspectorVersion } from "@inspector/core/node/version.js";
+import {
+  ELICIT_MODES,
+  ElicitationAutopilot,
+  type AutopilotConfig,
+  type ElicitMode,
+} from "./elicit/elicitation-autopilot.js";
+import { DEFAULT_POLICY } from "./elicit/jev-elicitation.js";
 
 export const validLogLevels: LoggingLevel[] = Object.values(
   LoggingLevelSchema.enum,
@@ -112,7 +120,14 @@ async function callMethod(
   storedAuthOnly: boolean,
   relogin: boolean,
   revoke: boolean,
+  elicit?: AutopilotConfig,
 ): Promise<void> {
+  // Built before connecting so a missing API key or an unreadable replay file
+  // is a usage error, not a failure halfway through a tool call.
+  const autopilot = elicit
+    ? await ElicitationAutopilot.create(elicit)
+    : undefined;
+
   // Clear after parse-time validation so a bad flag combo never deletes store
   // entries. Deletes the shared URL-keyed OAuth entry (not "ignore for this run").
   if (relogin) {
@@ -179,7 +194,10 @@ async function callMethod(
     initialLoggingLevel: "debug",
     progress: false,
     sample: false,
-    elicit: false,
+    // Form elicitation is advertised only when `--elicit` is given, since
+    // only then is anything here able to answer it. URL mode stays off: it
+    // needs a browser the CLI does not drive.
+    elicit: autopilot ? { form: true } : false,
     // Advertise the roots configured for this server in mcp.json, exactly as
     // web does (`App.tsx`) so both answer `roots/list` with the same content.
     // Passing the option (even empty) is what negotiates `capabilities.roots`
@@ -209,6 +227,8 @@ async function callMethod(
     ...clientAuthOptions,
   });
 
+  autopilot?.attach(inspectorClient);
+
   try {
     await connectInspectorWithOAuth(
       inspectorClient,
@@ -219,15 +239,28 @@ async function callMethod(
       { storedAuthOnly, autoOpenControl },
     );
 
-    const outcome = await withCliAuthRecoveryRetry(
-      inspectorClient,
-      serverConfig,
-      redirectUrlProvider,
-      callbackUrlConfig,
-      serverSettings,
-      () => runMethod(inspectorClient, args),
-      { storedAuthOnly, autoOpenControl },
-    );
+    let outcome: Awaited<ReturnType<typeof runMethod>>;
+    try {
+      outcome = await withCliAuthRecoveryRetry(
+        inspectorClient,
+        serverConfig,
+        redirectUrlProvider,
+        callbackUrlConfig,
+        serverSettings,
+        () => runMethod(inspectorClient, args),
+        { storedAuthOnly, autoOpenControl },
+      );
+    } catch (err) {
+      // An elicitation the autopilot could not answer was cancelled, and the
+      // server's reaction to that is usually what threw here. `settle` throws
+      // the elicitation problem instead when there is one — the cause, not
+      // the symptom.
+      await autopilot?.settle();
+      throw err;
+    }
+    // Before the result is printed: a run whose elicitation was cancelled
+    // must not emit the result of that cancellation as if it were the answer.
+    await autopilot?.settle();
 
     await consumeMethodOutcome(outcome, args);
   } finally {
@@ -601,12 +634,96 @@ function parseKeyValuePair(
   return { ...previous, [key as string]: parsedValue };
 }
 
+/** The `--elicit*` options as commander parses them. */
+interface ElicitOptions {
+  elicit?: ElicitMode;
+  elicitPolicy?: string;
+  elicitDefault?: Record<string, StrictJsonValue>;
+  elicitThreshold?: number;
+  elicitRecord?: string;
+  elicitReplay?: string;
+}
+
+/**
+ * Reject `--elicit-*` combinations that would be accepted and silently do
+ * nothing: a modifier without `--elicit`, record and replay together, or
+ * record/replay in `defaults` mode, which never calls Jev.
+ */
+export function validateElicitOptions(options: ElicitOptions): void {
+  const modifiers: [string, boolean][] = [
+    ["--elicit-policy", options.elicitPolicy !== undefined],
+    ["--elicit-default", Object.keys(options.elicitDefault ?? {}).length > 0],
+    ["--elicit-threshold", options.elicitThreshold !== undefined],
+    ["--elicit-record", options.elicitRecord !== undefined],
+    ["--elicit-replay", options.elicitReplay !== undefined],
+  ];
+  if (!options.elicit) {
+    const given = modifiers.find(([, set]) => set);
+    if (given) throw new Error(`${given[0]} requires --elicit.`);
+    return;
+  }
+  if (
+    options.elicitRecord !== undefined &&
+    options.elicitReplay !== undefined
+  ) {
+    throw new Error("--elicit-record cannot be combined with --elicit-replay.");
+  }
+  if (
+    options.elicit !== "jev" &&
+    (options.elicitRecord !== undefined || options.elicitReplay !== undefined)
+  ) {
+    throw new Error(
+      "--elicit-record and --elicit-replay require --elicit jev (defaults mode never calls Jev).",
+    );
+  }
+}
+
+/**
+ * Resolve the autopilot's configuration: read an `@path` policy, and hand Jev
+ * the tool call being made so its decisions see what the user started.
+ */
+async function buildElicitConfig(
+  mode: ElicitMode,
+  options: ElicitOptions,
+  methodArgs: MethodArgs & { method: string },
+): Promise<AutopilotConfig> {
+  let policy = options.elicitPolicy?.trim() || DEFAULT_POLICY;
+  if (policy.startsWith("@")) {
+    const { readFile } = await import("node:fs/promises");
+    const path = policy.slice(1);
+    try {
+      policy = (await readFile(path, "utf8")).trim();
+    } catch (err) {
+      throw new Error(
+        `--elicit-policy: cannot read ${path} (${err instanceof Error ? err.message : String(err)}).`,
+        { cause: err },
+      );
+    }
+  }
+  return {
+    mode,
+    policy,
+    overrides: options.elicitDefault ?? {},
+    threshold: options.elicitThreshold ?? 0.8,
+    ...(options.elicitRecord && { recordPath: options.elicitRecord }),
+    ...(options.elicitReplay && { replayPath: options.elicitReplay }),
+    ...(methodArgs.method === "tools/call" &&
+      methodArgs.toolName && {
+        toolCall: {
+          name: methodArgs.toolName,
+          arguments: methodArgs.toolArg ?? {},
+        },
+      }),
+  };
+}
+
 type ParseResult =
   | {
       shortCircuit?: undefined;
       serverConfig: MCPServerConfig;
       serverSettings: InspectorServerSettings | undefined;
       methodArgs: MethodArgs & { method: string };
+      elicit?: AutopilotConfig;
       clientConfigPath?: string;
       clientId?: string;
       clientSecret?: string;
@@ -765,6 +882,45 @@ async function parseArgs(argv?: string[]): Promise<ParseResult> {
       "Run the SEP-2640 conformance and digest checks over the skills returned, emit one JSON report per skill on stdout, and exit 7 if any fails or 8 if any could not be fully checked within the read bounds. Use with --method skills/list or --method skills/get.",
     )
     .option(
+      "--elicit <mode>",
+      `Answer the server's form elicitations unattended. ${ELICIT_MODES.join(" or ")}: jev asks TypeSafe's Jev (TYPESAFE_API_KEY) to decide accept/decline/cancel and every enum/boolean field as the user in --elicit-policy; defaults accepts, filling fields from --elicit-default and the schema's defaults. One JSON line per elicitation on stderr; exit 9 when an answer is below --elicit-threshold.`,
+      (v: string): ElicitMode => {
+        if (!ELICIT_MODES.includes(v as ElicitMode)) {
+          throw new Error(`--elicit must be ${ELICIT_MODES.join(" or ")}.`);
+        }
+        return v as ElicitMode;
+      },
+    )
+    .option(
+      "--elicit-policy <text>",
+      "Plain-English description of the simulated user Jev answers as (e.g. 'never approves deleting production data'). @path reads it from a file.",
+    )
+    .option(
+      "--elicit-default <pairs...>",
+      "Elicitation field value as key=value (value JSON-parsed). Always wins over Jev, and is the only source for text and number fields.",
+      parseKeyValuePair,
+      {},
+    )
+    .option(
+      "--elicit-threshold <p>",
+      "Minimum probability for Jev's answer to be acted on, in (0.5, 1] (default 0.8). Below it the elicitation is cancelled and the run exits 9.",
+      (v: string) => {
+        const n = Number(v);
+        if (!Number.isFinite(n) || n <= 0.5 || n > 1) {
+          throw new Error("--elicit-threshold must be a number in (0.5, 1].");
+        }
+        return n;
+      },
+    )
+    .option(
+      "--elicit-record <path>",
+      "With --elicit jev: write Jev's answers to <path> so the run can be replayed without a key.",
+    )
+    .option(
+      "--elicit-replay <path>",
+      "With --elicit jev: answer from a recording instead of calling Jev; exit 10 if the server sends an elicitation that was not recorded.",
+    )
+    .option(
       "--connect-timeout <ms>",
       `Connection timeout in ms (default ${DEFAULT_CONNECT_TIMEOUT_MS} for ad-hoc --server-url / target invocations; 0 = no timeout).`,
       (v: string) => {
@@ -875,6 +1031,12 @@ async function parseArgs(argv?: string[]): Promise<ParseResult> {
     appInfo?: boolean;
     strict?: boolean;
     verify?: boolean;
+    elicit?: ElicitMode;
+    elicitPolicy?: string;
+    elicitDefault?: Record<string, StrictJsonValue>;
+    elicitThreshold?: number;
+    elicitRecord?: string;
+    elicitReplay?: string;
     cursor?: string;
     connectTimeout?: number;
     protocolEra?: ServerProtocolEra;
@@ -959,6 +1121,11 @@ async function parseArgs(argv?: string[]): Promise<ParseResult> {
       );
     }
   }
+
+  // The `--elicit-*` modifiers are checked here, ahead of the short-circuit
+  // returns, for the reason `--strict` is: accepted without `--elicit` they
+  // would do nothing while reading as though they had.
+  validateElicitOptions(options);
 
   // State-path precedence (getStateFilePath): MCP_INSPECTOR_OAUTH_STATE_PATH →
   // <MCP_STORAGE_DIR>/oauth.json → ~/.mcp-inspector/storage/oauth.json — the
@@ -1196,10 +1363,15 @@ async function parseArgs(argv?: string[]): Promise<ParseResult> {
     format: options.format,
   };
 
+  const elicit = options.elicit
+    ? await buildElicitConfig(options.elicit, options, methodArgs)
+    : undefined;
+
   return {
     serverConfig,
     serverSettings,
     methodArgs,
+    ...(elicit && { elicit }),
     clientConfigPath: options.clientConfig,
     clientId: options.clientId,
     clientSecret: options.clientSecret,
@@ -1229,6 +1401,7 @@ export async function runCli(argv?: string[]): Promise<void> {
     storedAuthOnly,
     relogin,
     revoke,
+    elicit,
   } = parsed;
   const clientConfig = await loadRunnerClientConfig({ clientConfigPath });
   // A bad --callback-url / MCP_OAUTH_CALLBACK_URL is a *usage* error, but its
@@ -1259,5 +1432,6 @@ export async function runCli(argv?: string[]): Promise<void> {
     storedAuthOnly === true,
     relogin === true,
     revoke !== false,
+    elicit,
   );
 }

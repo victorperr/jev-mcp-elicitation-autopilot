@@ -1,3 +1,4 @@
+<!-- Modified by Victor (2026): added the Unattended elicitation (--elicit) section and exit codes 9-10. See NOTICE. -->
 # MCP Inspector CLI Client
 
 CLI for the Inspector: connect, run a `--method`, disconnect. Invoked as `mcp-inspector --cli`.
@@ -123,6 +124,7 @@ Options that specify the MCP server (catalog/config file, ad-hoc command/URL, en
 | `--app-info`                  | Probe a tool's MCP App UI metadata without invoking it. With `--method tools/call --tool-name <name>`: prints one JSON line (`hasApp`, `resourceUri`, `csp`, `permissions`, `domain`, …) and exits `0` if the tool has an app or `2` (`no_app`) if not. With `--method tools/list`: emits NDJSON — one app-info line per tool over a single connection.                                                              |
 | `--strict`                    | With `--method tools/list`: report tool-schema portability problems in full (path, issue, suggested fix) on stderr, and exit `6` if any is error-severity. Without it, a one-line count is printed instead. See [Schema portability](#schema-portability---strict). |
 | `--verify`                    | With `--method skills/list` or `--method skills/get`: run the SEP-2640 conformance, digest and frontmatter checks over the skills returned, emit one JSON report per skill on stdout, and exit `7` if any fails. See [Skill verification](#skill-verification---verify). |
+| `--elicit <jev\|defaults>`    | Answer the server's form elicitations unattended — by a policy-driven simulated user (`jev`) or from defaults. Companion flags `--elicit-policy`, `--elicit-default`, `--elicit-threshold`, `--elicit-record`, `--elicit-replay`. Exits `9` on an ambiguous answer. See [Unattended elicitation](#unattended-elicitation---elicit). |
 | `--format <text\|json>`       | Output format. `text` (default) pretty-prints the result. `json` emits a single JSON object on stdout (`{ "result": … }`, plus `{ "appInfo": … }` as a sibling key for App tools) with no banners, so the whole output pipes cleanly into `jq`.                                                                                                                                                                      |
 | `--relogin`                   | Delete stored OAuth for this server URL from the shared store before connect; interactive login still only runs if the server requires auth. Requires an HTTP/SSE URL (rejected for stdio). Conflicts with `--stored-auth-only` / `--use-stored-auth` / `--wait-for-auth` / catalog short-circuits.                                                                                                                  |
 | `--no-revoke`                 | With `--relogin`, skip the [RFC 7009](https://datatracker.ietf.org/doc/html/rfc7009) revocation request that would otherwise end the grant at the authorization server when the local state is deleted. The per-server `oauth.revokeOnClear` setting is the persistent form of the same opt-out; either one is enough to skip it. See [Revoking on `--relogin`](#revoking-on---relogin). |
@@ -303,7 +305,7 @@ npx @modelcontextprotocol/inspector --cli --catalog mcp.json --server my-http-se
   --method tools/list
 ```
 
-See [EMA / enterprise-managed auth](../../specification/v2_auth_ema.md) and [OAuth smoke testing](../../specification/v2_auth_smoke_testing.md) (§3 Stytch/CIMD; [§5 mid-session manual validation](../../specification/v2_auth_smoke_testing.md#5-mid-session-auth--step-up--manual-validation) — CLI **C1–C2**).
+See [EMA / enterprise-managed auth](https://github.com/modelcontextprotocol/inspector/blob/v2/main/specification/v2_auth_ema.md) and [OAuth smoke testing](https://github.com/modelcontextprotocol/inspector/blob/v2/main/specification/v2_auth_smoke_testing.md) (§3 Stytch/CIMD; [§5 mid-session manual validation](https://github.com/modelcontextprotocol/inspector/blob/v2/main/specification/v2_auth_smoke_testing.md#5-mid-session-auth--step-up--manual-validation) — CLI **C1–C2**).
 
 #### Stored-auth (web → CLI handoff)
 
@@ -425,6 +427,69 @@ covers:
 A read failure is recorded against the file it happened on and the walk
 continues, so one unreadable file never hides the findings after it.
 
+#### Unattended elicitation (`--elicit`)
+
+By default the CLI does not advertise elicitation, so a tool that asks the user
+something mid-call cannot be exercised from a script — the branch that uses the
+answer is never reached. `--elicit` makes the CLI answer the server's **form**
+elicitations itself:
+
+```bash
+# A simulated user decides. Jev answers accept / decline / cancel, and every
+# enum and boolean field, as the user described by the policy.
+TYPESAFE_API_KEY=… mcp-inspector --cli <server> --method tools/call \
+  --tool-name drop_table --tool-arg table=orders \
+  --elicit jev --elicit-policy @policies/cautious.txt \
+  --elicit-default ticket=CHG-1234
+
+# No model at all: accept, filling fields from --elicit-default and the
+# schema's own defaults.
+mcp-inspector --cli <server> --method tools/call --tool-name drop_table \
+  --elicit defaults --elicit-default confirm=true env=staging
+```
+
+| Flag                             | Meaning |
+| -------------------------------- | ------- |
+| `--elicit <jev\|defaults>`       | Turn on form elicitation and answer it. `jev` calls TypeSafe's [Jev](https://docs.typesafe.ai) (`TYPESAFE_API_KEY`; `TYPESAFE_API_URL` overrides the endpoint). |
+| `--elicit-policy <text\|@path>`  | The user Jev acts as, in plain English. Two policies (a cautious and an eager user) cover both branches of a confirmation with no mocks. |
+| `--elicit-default <key=value>`   | A field value (JSON-parsed, like `--tool-arg`). Always wins over Jev, and is the only source for **text and number** fields — Jev decides, it does not write. |
+| `--elicit-threshold <p>`         | Minimum probability, in `(0.5, 1]`, for an answer to be acted on (default `0.8`). |
+| `--elicit-record <path>`         | Save Jev's answers so the run can be replayed. |
+| `--elicit-replay <path>`         | Answer from a recording: no key, no network. Exits `10` when the server sends an elicitation that was not recorded. |
+
+How each field is decided:
+
+| Field in `requestedSchema`                         | Jev question                         |
+| -------------------------------------------------- | ------------------------------------ |
+| single-select (`enum`, `oneOf`)                    | one `choice` over the options        |
+| multi-select (`array` of enum items)               | one `noul` (yes/no) per option       |
+| `boolean`                                          | one `noul`                           |
+| `string`, `number`, `integer`                      | none: `--elicit-default`, else the schema's `default` |
+
+All questions go in **one** Jev request per elicitation. Each elicitation writes
+one JSON transcript line to **stderr** (action, per-field value, source and
+probability), so stdout stays the method's result.
+
+**Probabilities are held to a threshold, not argmaxed.** Jev cannot abstain, so
+an answer inside the ambiguous band — a noul between `1 - p` and `p`, or a
+choice whose winner is below `p` — is not acted on: the elicitation is answered
+`cancel` (the server is never left waiting) and the run exits `9`. That is a
+finding about the server as much as about the run: a form a policy-driven user
+cannot decide on is one a person may struggle with too. A required text field
+with no `--elicit-default` and no schema default exits `1` and names the flag to
+pass. URL-mode elicitation needs a browser and is declined.
+
+**Reproducible CI.** Record once with a key, commit the file, replay in CI:
+
+```bash
+mcp-inspector --cli <server> … --elicit jev --elicit-record elicit.json   # locally
+mcp-inspector --cli <server> … --elicit jev --elicit-replay elicit.json   # in CI
+```
+
+A recording stores Jev's raw answers keyed by a hash of the exact request, so a
+replay re-applies the _current_ `--elicit-threshold`, and a change to the form,
+the policy or the defaults is caught (exit `10`) instead of silently answered.
+
 ## Exit codes & error envelopes
 
 Every non-zero exit maps to a stable failure class, so a programmatic caller
@@ -442,6 +507,8 @@ prose from stderr:
 | `6`  | `--strict` found an error-severity tool-schema portability problem (`schema_unportable` — the schema is valid JSON Schema, just not portable). |
 | `7`  | `--verify` found a SEP-2640 violation (`skills_nonconformant` — a conformance error, a digest or size mismatch, or an unreadable manifest file). |
 | `8`  | `--verify` could not check the whole catalog (`skills_incomplete` — the read bounds stopped the walk). The server broke no **MUST**: the 512-entry and 16 MiB limits are `SHOULD NOT`, and hosts may support more. A job that tolerates oversized catalogs can allow `8` and still fail on `7`. |
+| `9`  | `--elicit jev` could not answer an elicitation confidently (`elicitation_ambiguous` — an answer fell below `--elicit-threshold`). The elicitation was cancelled and the tool result is not printed. |
+| `10` | `--elicit-replay` has no recorded answer for an elicitation the server sent (`elicitation_not_recorded` — its form, the policy or the defaults changed). Re-record. |
 
 On any non-zero exit the CLI also writes a single JSON line to **stderr** — the
 `ErrorEnvelope`:

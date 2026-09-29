@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// Modified by Victor (2026): no longer vouches for the removed verify:skills guard. See NOTICE.
 // Durable guard for the "every first-party source file is format-gated" invariant
 // that #1789 established by a one-shot manual audit (PR #1792). A prettier
 // `format`/`format:check` glob that stops covering a file fails silently — the
@@ -168,17 +169,13 @@ function trackedSourceFiles() {
 
 // Vouch for the sibling guards: a guard can't detect being unrun itself, so they
 // form a cycle instead. This one checks the others; each of them checks only
-// this one. So dropping `verify:typecheck-coverage`, `verify:dep-lockstep` or
-// `verify:skills` is caught here, and dropping *this* guard is caught by any of
-// them. Only removing all of them at once slips through.
+// this one. So dropping `verify:typecheck-coverage` or `verify:dep-lockstep`
+// is caught here, and dropping *this* guard is caught by either of them. Only
+// removing all of them at once slips through.
 const rootScripts = JSON.parse(
   readFileSync(path.join(repoRoot, "package.json"), "utf8"),
 ).scripts;
-for (const sibling of [
-  "verify:typecheck-coverage",
-  "verify:dep-lockstep",
-  "verify:skills",
-]) {
+for (const sibling of ["verify:typecheck-coverage", "verify:dep-lockstep"]) {
   if (rootReachesScript(rootScripts, sibling)) continue;
   console.error(
     `verify:format-coverage — the root \`validate\` no longer runs \`${sibling}\` (its sibling guard). Restore it.`,

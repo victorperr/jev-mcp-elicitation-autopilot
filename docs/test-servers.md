@@ -249,7 +249,7 @@ mechanism, so it is still the correct signal there.
 
 Open the Apps tab, select `mcp_app_demo`, give it a title and click **Open App**: the widget renders inside the sandbox iframe and exercises the host-side UI protocol surface — host-context render, `size-changed`, `ui/message`, and a log line into the **App logs** panel. Because the widget is served through the sandbox proxy page, this config is also what reproduces [#1859](https://github.com/modelcontextprotocol/inspector/issues/1859) (a missing `clients/web/static/sandbox_proxy.html` surfaces here as a "Sandbox not loaded" message in place of the widget) — a failure that only ever appeared in an installed package, never in the repo.
 
-For the scripted version of the same flow (`--app-info` probe → deep link → rendered widget), see [Reviewing an MCP App](./mcp-app-review.md).
+For the scripted version of the same flow (`--app-info` probe → deep link → rendered widget), see [Reviewing an MCP App](https://github.com/modelcontextprotocol/inspector/blob/v2/main/docs/mcp-app-review.md).
 
 ## An App's dedicated origin
 

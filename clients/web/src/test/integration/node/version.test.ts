@@ -1,3 +1,4 @@
+// Modified by Victor (2026): follows the renamed root package. See NOTICE.
 import { describe, it, expect } from "vitest";
 import {
   mkdtempSync,
@@ -42,7 +43,7 @@ describe("readInspectorVersion", () => {
     // package.json (the catch branch) before reaching the root.
     expect(readInspectorVersion(import.meta.url)).toBe(readRootVersion());
     // Sanity: the root manifest really is the one we match on.
-    expect(ROOT_PACKAGE_NAME).toBe("@modelcontextprotocol/inspector");
+    expect(ROOT_PACKAGE_NAME).toBe("mcp-inspector-jev-elicitation");
   });
 
   it("skips a matching-name manifest that has no version, then throws when no versioned root exists above the caller", () => {

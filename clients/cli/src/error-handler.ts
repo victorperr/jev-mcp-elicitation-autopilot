@@ -1,3 +1,4 @@
+// Modified by Victor (2026): added exit codes 9 and 10 for --elicit. See NOTICE.
 import { awaitableError } from "./utils/awaitable-log.js";
 
 /**
@@ -11,6 +12,9 @@ import { awaitableError } from "./utils/awaitable-log.js";
  *  - 4: server unreachable (DNS, connect refused, timeout, fetch failure)
  *  - 5: tool error (`tools/call` returned `isError:true`, or tool not found)
  *  - 6: `--strict` found an error-severity tool-schema portability finding
+ *  - 7 / 8: `--verify` found a nonconformant / incompletely checked skill
+ *  - 9: `--elicit jev` found an elicitation it could not answer confidently
+ *  - 10: `--elicit-replay` has no recorded answer for an elicitation
  *
  * Note 6 is `SCHEMA_UNPORTABLE`, not "invalid": the whole premise of the lint
  * is that these schemas ARE valid JSON Schema and are merely refused by some
@@ -48,6 +52,22 @@ export const EXIT_CODES = {
    * on 7.
    */
   SKILL_INCOMPLETE: 8,
+  /**
+   * `--elicit jev` could not answer an elicitation with confidence: an answer
+   * fell below `--elicit-threshold`.
+   *
+   * A finding about the server as much as a failure of the run: a form that a
+   * policy-driven user cannot decide on is one a human may not either. Kept
+   * apart from `USAGE` so CI can tell "the form is ambiguous" from "the flags
+   * are wrong" (a required text field left unfilled is the latter).
+   */
+  ELICITATION_AMBIGUOUS: 9,
+  /**
+   * `--elicit-replay` had no recorded answer for an elicitation the server
+   * sent: its form, the policy or the defaults changed since recording. Its
+   * own code so a CI job can treat it as "re-record" rather than a failure.
+   */
+  ELICITATION_NOT_RECORDED: 10,
 } as const;
 
 /** Machine-readable error envelope written as one JSON line on stderr. */

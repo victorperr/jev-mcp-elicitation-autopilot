@@ -1,114 +1,129 @@
-# MCP Inspector
+# Elicitation Autopilot for MCP servers
 
-A developer tool for inspecting [Model Context Protocol](https://modelcontextprotocol.io) (MCP) servers. It ships as a single package, `@modelcontextprotocol/inspector`, that provides three ways to inspect a server:
+**Test the human-in-the-loop branches of an MCP server, unattended, in CI.**
 
-- **Web** — a Vite + React + [Mantine](https://mantine.dev) single-page app with a Node backend.
-- **CLI** — a scriptable command-line client for automation, CI, and fast agent feedback loops.
-- **TUI** — an interactive terminal UI built with [Ink](https://github.com/vadimdemedes/ink).
+This repository is a fork of the official [MCP Inspector](https://github.com/modelcontextprotocol/inspector)
+(© Model Context Protocol a Series of LF Projects, LLC — see [Attribution](#attribution)).
+On top of it, add **`--elicit`**: the CLI answers a server's
+[elicitation](https://modelcontextprotocol.io/specification/2025-11-25/client/elicitation)
+forms itself, as a simulated user whose decisions are made by
+[TypeSafe's Jev](https://docs.typesafe.ai), a decision model.
 
-All three run through one global `mcp-inspector` binary:
+## The problem
+
+MCP servers ask the user things mid-call: _"This will delete 42,118 rows from prod. Continue?"_,
+_"Which environment?"_. Those confirmation and choice branches are the riskiest code a server has, and nothing tests them automatically: the upstream CLI connects with elicitation **off**, so a script can never reach the branch that consumes the answer.
+
+## What `--elicit` does
 
 ```bash
-npx @modelcontextprotocol/inspector          # web UI (default)
-npx @modelcontextprotocol/inspector --cli    # CLI
-npx @modelcontextprotocol/inspector --tui    # TUI
+TYPESAFE_API_KEY=… mcp-inspector --cli <server> --method tools/call \
+  --tool-name drop_table --tool-arg table=orders \
+  --elicit jev --elicit-policy "Cautious operator. Never approves deleting production data." \
+  --elicit-default ticket=CHG-1234
 ```
 
-> [!WARNING]
-> **On a machine with no OS keychain, secrets are saved to a plaintext file by default.** That covers Linux without libsecret or a Secret Service, headless and SSH sessions, Termux, and containers with a mounted volume. OAuth client secrets and stdio `env:` values then go to `~/.mcp-inspector/secrets.json`, unencrypted unless you supply a key. See [Where secrets are stored](./docs/secret-storage.md) for how to get a keychain back, encrypt the file, or keep secrets in memory only.
+```jsonc
+// stderr — one transcript line per elicitation
+{"elicitation":{"message":"This will permanently delete 42,118 rows…","mode":"jev","model":"jev-1.13.0",
+ "action":{"value":"decline","probability":0.93},"fields":[]}}
+```
 
-> **Upgrading from v1?** Read the [v1 → v2 migration guide](./docs/v1-to-v2-migration.md) — CLI flags, the new `--config` vs. `--catalog` split, the Node engine bump, and what no longer ships.
+Swap the policy for an eager user and the same command exercises the **accept** branch: two
+plain-English policies cover both sides of a confirmation, with no mocks.
 
-> **Repo status.** This is the **v2** line of the Inspector. Active development happens on **`v2/main`** (the develop branch — all v2 PRs target it), which is merged into **`main`** at milestone releases; `main` is the default branch and holds the latest released v2, published to the npm `latest` tag. The legacy **v1** line lives on **`v1/main`** — security fixes only, published straight from that branch to the npm `v1-latest` tag (`npx @modelcontextprotocol/inspector@v1-latest`). See [`AGENTS.md`](./AGENTS.md) for branch/board conventions.
+**How an elicitation becomes one Jev request.** MCP restricts a form's `requestedSchema` to flat
+primitive fields, and most of them are decisions, not text:
 
-## Quick start (development)
+| Form field                               | Jev question                                          |
+| ---------------------------------------- | ----------------------------------------------------- |
+| the response itself                      | `choice`: accept / decline / cancel                   |
+| single-select (`enum`, `oneOf`)          | `choice` over the options                             |
+| multi-select (array of enum)             | one `noul` (yes/no) per option                        |
+| `boolean`                                | `noul`                                                |
+| `string`, `number`                       | never guessed: `--elicit-default`, else the schema `default` |
+
+All questions are answered in parallel against the same state (policy, message, form, the tool
+call that triggered it) in **one request**, so a whole form costs roughly one decision call.
+
+**Design decisions worth reading the code for**
+
+- **Probabilities are thresholded, not argmaxed.** Jev cannot abstain, so an answer in the
+  ambiguous band is never acted on: the server receives `cancel` (it is never left hanging), the
+  tool result is withheld, and the run exits `9`. An ambiguous form is itself a finding: if a
+  policy-driven user cannot decide, a human may not either.
+- **Deterministic CI via record/replay.** `--elicit-record` stores Jev's raw answers keyed by a
+  SHA-256 of the exact request; `--elicit-replay` needs no key and no network, re-applies the
+  *current* threshold, and exits `10` when the server's form, the policy or the defaults changed.
+- **Untrusted input is narrowed, not cast.** Both the server's schema and Jev's response are
+  validated field by field; an off-spec field becomes `unsupported` instead of crashing the run.
+- **No new dependency.** Jev is one `fetch` call through the existing proxy-aware fetch, with
+  exponential backoff on `429`/`529`.
+- **`--elicit defaults`** answers from defaults alone, with no model call.
+
+Full flag reference: [CLI README → Unattended elicitation](./clients/cli/README.md#unattended-elicitation---elicit).
+
+### Where the code is
+
+| File | Role |
+| --- | --- |
+| [`clients/cli/src/elicit/jev-elicitation.ts`](./clients/cli/src/elicit/jev-elicitation.ts) | Pure mapping: schema → fields → Jev questions → thresholded decision |
+| [`clients/cli/src/elicit/elicitation-autopilot.ts`](./clients/cli/src/elicit/elicitation-autopilot.ts) | Subscribes to the client's pending-elicitation queue, record/replay, failure → exit code |
+| [`clients/cli/src/elicit/jev-client.ts`](./clients/cli/src/elicit/jev-client.ts) · [`jev-types.ts`](./clients/cli/src/elicit/jev-types.ts) | HTTP client and wire types for `POST /v1/systemone` |
+| [`clients/cli/__tests__/elicit-cli.test.ts`](./clients/cli/__tests__/elicit-cli.test.ts) | End to end: real CLI → real MCP test server → stubbed Jev endpoint |
+| [`clients/cli/__tests__/`](./clients/cli/__tests__) `jev-*.test.ts`, `elicitation-autopilot.test.ts` | Unit tests for every decision path |
+
+## Quick start
 
 Requires Node `>=22.19.0`.
 
 ```bash
-npm install          # at the repo root; postinstall cascades into every client
-npm run build        # web → cli → tui → launcher
+npm install                 # root install cascades into every client
+npm run build
+cd clients/cli && npx vitest run elicit jev-   # the feature's tests
 ```
 
-For day-to-day **web** iteration, run Vite directly — fast HMR, no launcher build needed:
+## Connecting to Jev
 
-```bash
-cd clients/web && npm run dev
-```
+1. Get an API key from [TypeSafe](https://typesafe.ai) (access currently goes through a waitlist).
+2. Expose it as an environment variable. The CLI reads it from the environment only; there is
+   no `.env` loading, so the key never needs to live in a file inside the repo.
 
-The launcher-driven scripts run the **built** launcher, so build first:
+   ```bash
+   export TYPESAFE_API_KEY="ts-…"          # bash / zsh
+   ```
 
-```bash
-npm run web        # prod web launcher against clients/web/dist
-npm run web:dev    # web launcher in --dev mode (Vite)
-```
+   ```powershell
+   $env:TYPESAFE_API_KEY = "ts-…"          # PowerShell (current session)
+   ```
 
-v2 is **not** an npm workspace — each client under `clients/*` keeps its own `package.json` and `node_modules`, and shared code lives in `core/`, consumed via a `@inspector/core` build-time alias. **Every runtime dependency `core/` imports is declared once, in the repo-root `package.json`**, and each client declares only what that client alone consumes — its UI stack, its bundler-inlined packages, its dev tooling — which leaves `clients/cli` and `clients/launcher` with no runtime dependencies of their own. What that means for adding a dependency (root vs. client, `dependencies` vs. `devDependencies`, and the bundler `external` lists) is in the [`local-dev` skill](./.claude/skills/local-dev/SKILL.md).
+3. Run any call with `--elicit jev`. Requests go to `POST https://api.typesafe.ai/v1/systemone`;
+   set `TYPESAFE_API_URL` to point elsewhere (the end-to-end tests use it to target a local stub).
 
-## Project layout
+No key? `--elicit defaults` needs none, and `--elicit-replay <file>` replays a recorded run
+offline, which is how CI should run it.
 
-```
-inspector/
-├── clients/
-│   ├── web/          Web client (Vite + React + Mantine). src/ = browser app; server/ = Node backend
-│   ├── cli/          CLI client (tsup bundle, @inspector/core alias)
-│   ├── tui/          TUI client (Ink + React, tsup bundle)
-│   └── launcher/     Shared launcher — provides the `mcp-inspector` bin, dispatches to web/cli/tui
-├── core/             Shared code consumed via the `@inspector/core` alias (no package.json)
-├── test-servers/     Composable MCP test servers + fixtures used by integration and smoke tests
-├── scripts/          Root build/verify tooling (install cascade, smokes, the verify:* guards)
-│                     and repo automation run from CI (the dependency, Dependabot-alert and SDK sweeps)
-├── docs/             Task-oriented guides — see below
-├── specification/    Design/build specifications
-├── .claude/skills/   Agent skills: the repo's procedures, invokable by name
-├── AGENTS.md         Contribution rules for agents AND humans
-└── README.md         You are here
-```
+## The rest of the Inspector
 
-Each client has its own README with client-specific detail:
-[web](./clients/web/README.md) · [cli](./clients/cli/README.md) · [tui](./clients/tui/README.md) · [launcher](./clients/launcher/README.md).
+Everything outside `clients/cli/src/elicit/` is the upstream MCP Inspector v2 (web UI, TUI, CLI,
+shared `core/`), kept intact so the fork builds and tests as a whole. Its documentation is
+unchanged: [web](./clients/web/README.md) · [cli](./clients/cli/README.md) · [tui](./clients/tui/README.md) ·
+[launcher](./clients/launcher/README.md) · [architecture](./docs/architecture.md) ·
+[test servers](./docs/test-servers.md) · [quality gate](./docs/quality-gate.md) ·
+[smoke-testing a server](./docs/cli-smoke-testing.md).
 
-## Documentation
+## Attribution
 
-| Guide | Covers |
-| --- | --- |
-| [Architecture](./docs/architecture.md) | The `@inspector/core` shared package, and the web client's "dumb components" + Storybook approach |
-| [Testing and the quality gate](./docs/quality-gate.md) | What each `validate` / `coverage` / `smoke` / `verify:*` script covers, the GitHub-CI-vs-local-gate split, and the supported browsers |
-| [Writing a skill](./docs/skill-authoring.md) | How to write a skill description that actually fires, and eval cases that measure it — the case shapes that work, and the tuning loop |
-| [Test servers](./docs/test-servers.md) | The composable test servers and the showcase config for every feature — what to run, what to click, and what the broken build did |
-| [Publishing](./docs/publishing.md) | What ships in the tarball, the packaging invariants, and `pack:verify` |
-| [Docker](./docs/docker.md) | Running the container image — ports, volumes, and making secrets durable in a container |
-| [Where secrets are stored](./docs/secret-storage.md) | How the secret store is chosen on every runtime — OS keychain, `secrets.json` or memory — plus file encryption, locking, and moving back to a keychain |
-| [Migrating from v1 to v2](./docs/v1-to-v2-migration.md) | CLI flag mapping, `--config` vs. `--catalog`, the Node engine bump, env-var renames |
-| [Environment variables](./docs/environment-variables.md) | Every variable that changes runtime behavior — auth, ports, storage, the secret store, logging, proxies — plus the Node TLS variables for a self-signed server |
-| [MCP server configuration](./docs/mcp-server-configuration.md) | Which server(s) the Inspector connects to, and the config file format |
-| [Reviewing an MCP App](./docs/mcp-app-review.md) | The CLI-first → one-shot-web recipe for automated App-tool review |
-| [Smoke-testing an MCP server](./docs/cli-smoke-testing.md) | The connect → list → call → assert workflow for a shell or CI job: `--format json` + `jq`, the exit-code map, and keeping OAuth non-interactive |
-| [Launcher and config consolidation](./docs/launcher-config-consolidation-plan.md) | Why the launcher runs a client in-process rather than spawning it |
-| [Roadmap, Aug 2026 → Feb 2027](./docs/inspector-roadmap-2026-h2.md) | The six-month plan: spec-following work aligned to the published MCP roadmap, official extension support, and the experience work we choose |
-
-## Testing and the quality gate
-
-Each client self-validates from its own folder; the root scripts chain them. There is **no** aggregate root `test` script.
-
-```bash
-npm run validate     # fast inner loop: format:check + lint + typecheck + build + unit tests
-npm run coverage     # the per-file ≥90% gate (lines/statements/functions/branches)
-npm run local:gate   # MANDATORY before pushing — every GitHub CI check, plus two local-only ones
-```
-
-`npm run local:gate` chains every check below, plus the smokes and the Storybook tests. [Testing and the quality gate](./docs/quality-gate.md) owns the stage list and says what each one covers and why two are local-only; [`AGENTS.md`](./AGENTS.md) holds the testing rules themselves.
-
-## Contributing — `AGENTS.md`, `CLAUDE.md`, and the skills
-
-**[`AGENTS.md`](./AGENTS.md) is the contract for changing this codebase, and it applies to humans and AI agents alike.** It is not agent-only boilerplate — it holds the project's real **rules**: the version/label conventions, the TypeScript and Mantine/React standards, the testing and coverage requirements, and the mandatory pre-push gate. Read it before making changes, and keep it up to date when you change structure, tooling, or rules.
-
-The repo's **procedures** — multi-step recipes with commands and live IDs — live in [`.claude/skills/`](./.claude/skills) instead, one directory per procedure, so they are loaded only when the task calls for them. They are ordinary committed Markdown: an agent that doesn't understand skills can read them, and `AGENTS.md` carries an index of what exists. Claude Code users invoke one by name (`/release`, `/issue-triage`, …).
-
-`CLAUDE.md` is the entry point [Claude Code](https://claude.com/claude-code) loads automatically; it includes `AGENTS.md`, so agents and humans work from the same source of truth. If you use a different agent that reads `AGENTS.md`, you get the same rules.
-
-A key rule worth surfacing here: **all work is issue-driven.** Before starting, find or create a tracking issue on the v2 project board; open PRs against `v2/main` with `Closes #<issue>`. External contributions are accepted as **issues, not pull requests** — see [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+- **Upstream:** [modelcontextprotocol/inspector](https://github.com/modelcontextprotocol/inspector),
+  © 2024-2025 Model Context Protocol a Series of LF Projects, LLC, and its contributors.
+  This fork is based on its v2.8.0 release. It is **not affiliated with or endorsed by** the
+  Model Context Protocol project.
+- **My contribution:** the elicitation autopilot listed above, plus the integration changes to
+  existing files, each of which carries a `Modified by Victor` notice. [`NOTICE`](./NOTICE)
+  lists every change, including the upstream material removed from this fork.
+- **Jev** is a product of TypeSafe; this project only calls its public API.
 
 ## License
 
-See [`LICENSE`](./LICENSE). The MCP project is transitioning from the MIT License to Apache-2.0: new code contributions are licensed under Apache-2.0, documentation (excluding specifications) under CC-BY-4.0, and contributions whose authors originally licensed them under MIT and have not granted relicensing consent remain under MIT. The file carries the full Apache-2.0 and MIT texts and links the CC-BY-4.0 legal code.
+[`LICENSE`](./LICENSE) is unchanged from upstream (Apache-2.0, with MIT for contributions not yet
+relicensed, and CC-BY-4.0 for documentation). My additions are released under Apache-2.0.

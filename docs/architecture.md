@@ -2,7 +2,7 @@
 
 ## The `@inspector/core` shared package
 
-![Shared code architecture: the four clients over the @inspector/core shared package](../specification/diagrams/shared-code-architecture.png)
+![Shared code architecture: the four clients over the @inspector/core shared package](./images/shared-code-architecture.png)
 
 `core/` holds the logic shared by all three clients so that web, CLI, and TUI behave identically. Its entry point is the **`InspectorClient`** class (`core/mcp/`), which owns the connection to an MCP server, the request/response lifecycle, and a set of state stores; `core/react/` exposes React hooks over those stores that both the web and TUI (Ink) React trees consume — each reading its snapshot **during render** via `useSyncExternalStore`, so a store swap lands in the same frame and no event dispatched between render and subscribe is lost ([#1955](https://github.com/modelcontextprotocol/inspector/issues/1955)). OAuth (`core/auth/`) is factored into isomorphic logic plus browser/node/remote backends so the same flows work in the browser, in Node, and against a remote backend.
 
@@ -19,5 +19,5 @@ The v2 web client is built from **presentational ("dumb") components** — they 
 
 That approach is what makes **Storybook** first-class here: every screen and element component has a `*.stories.tsx` file (96+ stories) that renders it against fixture props. Storybook **play functions** double as interaction tests, run headless in GitHub CI (`test:storybook`, Chromium via Playwright) and in the local gate (`npm run local:storybook`, which installs the browser first).
 
-Styling follows a strict Mantine-first convention (theme variants and component props over CSS classes, `--inspector-*` CSS custom properties over raw color literals). The full rules live in [`AGENTS.md`](../AGENTS.md) under **React instructions** — read them before touching web UI. Element components live in `clients/web/src/components/elements/`; theme variants in `clients/web/src/theme/`.
+Styling follows a strict Mantine-first convention (theme variants and component props over CSS classes, `--inspector-*` CSS custom properties over raw color literals). The full rules live in [`AGENTS.md`](https://github.com/modelcontextprotocol/inspector/blob/v2/main/AGENTS.md) under **React instructions** — read them before touching web UI. Element components live in `clients/web/src/components/elements/`; theme variants in `clients/web/src/theme/`.
 

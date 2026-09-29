@@ -100,7 +100,7 @@ For every method **except** an `--app-info` probe, the envelope carries
 | Key | Present when |
 | --- | --- |
 | `result` | Always — except under `--app-info`, see below. |
-| `appInfo` | The result belongs to an [MCP App](./mcp-app-review.md) tool. |
+| `appInfo` | The result belongs to an [MCP App](https://github.com/modelcontextprotocol/inspector/blob/v2/main/docs/mcp-app-review.md) tool. |
 | `schemaFindings` | `--strict` is passed to `tools/list` **and** there is at least one portability finding. |
 
 ⚠️ **`--app-info` is a different shape, not a variation on this one.** It probes
@@ -574,7 +574,7 @@ there — capture the status first, then run `jq` over the captured output.
 
 - **Anything that needs a rendered UI.** For MCP App tools, `--app-info` gets
   you the security posture without a browser; rendering the widget is
-  [Reviewing an MCP App](./mcp-app-review.md).
+  [Reviewing an MCP App](https://github.com/modelcontextprotocol/inspector/blob/v2/main/docs/mcp-app-review.md).
 - **Streaming and session-only methods.** `--method` rejects them (e.g.
   `logging/tail`) — one CLI invocation is one request/response.
 - **The Inspector's own test suite.** `scripts/smoke-cli.mjs` is an internal

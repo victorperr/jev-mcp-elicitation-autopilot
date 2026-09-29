@@ -54,7 +54,7 @@ Components live under `src/components/` in four layers, smallest to largest:
 | `screens/`  | ~11   | Full tab screens (Tools, Resources, Servers, monitoring screens…).             |
 | `views/`    | 1     | `InspectorView` — the top-level layout that composes the screens.              |
 
-Every screen and element has a `*.stories.tsx` (see [Storybook](#storybook)). Styling follows the Mantine-first rules in [`AGENTS.md`](../../AGENTS.md) — theme variants and component props over CSS, `--inspector-*` tokens over raw colors.
+Every screen and element has a `*.stories.tsx` (see [Storybook](#storybook)). Styling follows the Mantine-first rules in [`AGENTS.md`](https://github.com/modelcontextprotocol/inspector/blob/v2/main/AGENTS.md) — theme variants and component props over CSS, `--inspector-*` tokens over raw colors.
 
 ## Tool-schema portability (`#1005`)
 
@@ -104,7 +104,7 @@ Two grab-bag directories, split by one rule: **`utils` = functions that compute;
 
 The top-level `src/types/` is a separate sibling — ambient `.d.ts` module stubs, not the place for new domain types (the one that lingers there, dead `navigation.ts`, is tracked for removal in [#1785](https://github.com/modelcontextprotocol/inspector/issues/1785)).
 
-Nothing _enforces_ the boundary — no path alias keys off it, and the coverage `include` in `vite.config.ts` lists both directories, so a move between them is coverage-neutral. It's a human-legible import-time signal. See [`AGENTS.md`](../../AGENTS.md) for the full rule (including the whitelist caveat — a module placed outside `components`/`lib`/`utils`/`server` falls out of the ≥90 gate).
+Nothing _enforces_ the boundary — no path alias keys off it, and the coverage `include` in `vite.config.ts` lists both directories, so a move between them is coverage-neutral. It's a human-legible import-time signal. See [`AGENTS.md`](https://github.com/modelcontextprotocol/inspector/blob/v2/main/AGENTS.md) for the full rule (including the whitelist caveat — a module placed outside `components`/`lib`/`utils`/`server` falls out of the ≥90 gate).
 
 ## Core tab automation contract
 
@@ -384,7 +384,7 @@ Storybook is first-class here because the components are presentational — each
 
 ## Auth token
 
-The dev/prod backend guards every `/api/*` route with `x-mcp-remote-auth: Bearer <MCP_INSPECTOR_API_TOKEN>`. The browser recovers the token, in priority order (see `App.tsx` `getAuthToken()`): the `window.__INSPECTOR_API_TOKEN__` global injected into `index.html` on every page load (`server/inject-auth-token.ts`), then a `?MCP_INSPECTOR_API_TOKEN=…` query param, then `sessionStorage`. Injection is a no-op when auth is disabled (`DANGEROUSLY_OMIT_AUTH`). See the root [AGENTS.md](../../AGENTS.md) for the full rationale, and [Environment variables](../../docs/environment-variables.md) for every variable the backend reads.
+The dev/prod backend guards every `/api/*` route with `x-mcp-remote-auth: Bearer <MCP_INSPECTOR_API_TOKEN>`. The browser recovers the token, in priority order (see `App.tsx` `getAuthToken()`): the `window.__INSPECTOR_API_TOKEN__` global injected into `index.html` on every page load (`server/inject-auth-token.ts`), then a `?MCP_INSPECTOR_API_TOKEN=…` query param, then `sessionStorage`. Injection is a no-op when auth is disabled (`DANGEROUSLY_OMIT_AUTH`). See the root [AGENTS.md](https://github.com/modelcontextprotocol/inspector/blob/v2/main/AGENTS.md) for the full rationale, and [Environment variables](../../docs/environment-variables.md) for every variable the backend reads.
 
 ## Host binding & the origin allow-list
 
