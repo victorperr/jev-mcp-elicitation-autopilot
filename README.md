@@ -83,9 +83,13 @@ npm run build
 cd clients/cli && npx vitest run elicit jev-   # the feature's tests
 ```
 
+## Try it
+
+[`examples/elicitation-demo`](./examples/elicitation-demo) is a runnable demo: a pretend production database whose `drop_table` tool asks for confirmation. It includes a no-key mode, cautious and eager policies for Jev, and record/replay.
+
 ## Connecting to Jev
 
-1. Get an API key from [TypeSafe](https://typesafe.ai) (access currently goes through a waitlist).
+1. Get an API key from [TypeSafe](https://typesafe.ai).
 2. Expose it as an environment variable. The CLI reads it from the environment only; there is
    no `.env` loading, so the key never needs to live in a file inside the repo.
 

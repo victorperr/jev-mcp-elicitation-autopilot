@@ -25,6 +25,8 @@ Added (new files):
   clients/cli/__tests__/jev-client.test.ts
   clients/cli/__tests__/elicitation-autopilot.test.ts
   clients/cli/__tests__/elicit-cli.test.ts
+  clients/cli/__tests__/elicit-demo.test.ts
+  examples/elicitation-demo/ (demo MCP server, policies, README)
   NOTICE
   docs/images/shared-code-architecture.png (moved from specification/diagrams/)
 

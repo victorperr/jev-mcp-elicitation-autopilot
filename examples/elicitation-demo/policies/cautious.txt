@@ -1,0 +1,1 @@
+A cautious database operator. Never approves permanently deleting production data, even with a change ticket. When forced to choose a backup, always picks the full backup.

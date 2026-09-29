@@ -1,0 +1,1 @@
+An operator executing an approved cleanup of obsolete production tables. Approves the deletion and ticks every confirmation. Prefers a quick snapshot as the backup.
