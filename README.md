@@ -1,6 +1,12 @@
 # Elicitation Autopilot for MCP servers
 
-**Test the human-in-the-loop branches of an MCP server, unattended, in CI.**
+**Test** the **human-in-the-loop branches** of an **MCP** server, unattended, in CI.
+
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+
+---
+
+> ⚠️ Work in Progress: This project is currently a work in progress and may contain bugs or breaking changes. Use with caution.
 
 This repository is a fork of the official [MCP Inspector](https://github.com/modelcontextprotocol/inspector)
 (© Model Context Protocol a Series of LF Projects, LLC — see [Attribution](#attribution)).
@@ -9,7 +15,7 @@ On top of it, add **`--elicit`**: the CLI answers a server's
 forms itself, as a simulated user whose decisions are made by
 [TypeSafe's Jev](https://docs.typesafe.ai), a decision model.
 
-## The problem
+## 💡 Why this project ?
 
 MCP servers ask the user things mid-call: _"This will delete 42,118 rows from prod. Continue?"_,
 _"Which environment?"_. Those confirmation and choice branches are the riskiest code a server has, and nothing tests them automatically: the upstream CLI connects with elicitation **off**, so a script can never reach the branch that consumes the answer.
@@ -29,11 +35,9 @@ TYPESAFE_API_KEY=… mcp-inspector --cli <server> --method tools/call \
  "action":{"value":"decline","probability":0.93},"fields":[]}}
 ```
 
-Swap the policy for an eager user and the same command exercises the **accept** branch: two
-plain-English policies cover both sides of a confirmation, with no mocks.
+Swap the policy for an eager user and the same command exercises the **accept** branch: two plain-English policies cover both sides of a confirmation, with no mocks.
 
-**How an elicitation becomes one Jev request.** MCP restricts a form's `requestedSchema` to flat
-primitive fields, and most of them are decisions, not text:
+**How an elicitation becomes one Jev request.** MCP restricts a form's `requestedSchema` to flat primitive fields, and most of them are decisions, not text:
 
 | Form field                               | Jev question                                          |
 | ---------------------------------------- | ----------------------------------------------------- |
@@ -43,10 +47,9 @@ primitive fields, and most of them are decisions, not text:
 | `boolean`                                | `noul`                                                |
 | `string`, `number`                       | never guessed: `--elicit-default`, else the schema `default` |
 
-All questions are answered in parallel against the same state (policy, message, form, the tool
-call that triggered it) in **one request**, so a whole form costs roughly one decision call.
+All questions are answered in parallel against the same state (policy, message, form, the tool call that triggered it) in **one request**, so a whole form costs roughly one decision call.
 
-**Design decisions worth reading the code for**
+**Design decisions**
 
 - **Probabilities are thresholded, not argmaxed.** Jev cannot abstain, so an answer in the
   ambiguous band is never acted on: the server receives `cancel` (it is never left hanging), the
@@ -63,7 +66,7 @@ call that triggered it) in **one request**, so a whole form costs roughly one de
 
 Full flag reference: [CLI README → Unattended elicitation](./clients/cli/README.md#unattended-elicitation---elicit).
 
-### Where the code is
+### 🔍 Where the new code is
 
 | File | Role |
 | --- | --- |
@@ -103,7 +106,7 @@ cd clients/cli && npx vitest run elicit jev-   # the feature's tests
 No key? `--elicit defaults` needs none, and `--elicit-replay <file>` replays a recorded run
 offline, which is how CI should run it.
 
-## The rest of the Inspector
+## The rest of the `mcp-inspector`
 
 Everything outside `clients/cli/src/elicit/` is the upstream MCP Inspector v2 (web UI, TUI, CLI,
 shared `core/`), kept intact so the fork builds and tests as a whole. Its documentation is
