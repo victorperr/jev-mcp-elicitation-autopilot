@@ -2,7 +2,8 @@
 
 **Test** the **human-in-the-loop branches** of an **MCP** server, unattended, in CI.
 
-![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![TypeScript](https://badges.frapsoft.com/typescript/code/typescript.png?v=101)
+![Node.js](https://img.shields.io/badge/22.0%2B-x?style=flat&logo=Node.js&logoColor=green&label=Node.js&color=green)
 
 ---
 
